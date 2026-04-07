@@ -1,8 +1,9 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { StyleSheet, View, Text } from "react-native";
-import MapView, { Marker, Geojson, Region } from "react-native-maps";
-import type { InterpolatedVehicle } from "../utils/interpolateMovement";
+import MapView, { Geojson, Region } from "react-native-maps";
 import { useTransitStore } from "../store/transitStore";
+import VehicleMarker from "./VehicleMarker";
+import type { GeoJSONFeatureCollection } from "../services/api";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -16,26 +17,6 @@ const CHICAGO_CENTER: Region = {
 };
 
 // ---------------------------------------------------------------------------
-// Marker colors per route type
-// ---------------------------------------------------------------------------
-
-const TRAIN_COLORS: Record<string, string> = {
-  Red: "#c62828",
-  Blue: "#1565c0",
-  Brn: "#6d4c41",
-  G: "#2e7d32",
-  Org: "#ef6c00",
-  P: "#6a1b9a",
-  Pink: "#e91e63",
-  Y: "#f9a825",
-};
-
-function markerColor(v: InterpolatedVehicle): string {
-  if (v.type === "train") return TRAIN_COLORS[v.route] ?? "#333";
-  return "#1b5e20"; // buses
-}
-
-// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -46,12 +27,44 @@ export default function TransitMap() {
   const error = useTransitStore((s) => s.error);
   const startPolling = useTransitStore((s) => s.startPolling);
 
+  const showBusRoutes = useTransitStore((s) => s.showBusRoutes);
+  const showTrainRoutes = useTransitStore((s) => s.showTrainRoutes);
+  const showBusVehicles = useTransitStore((s) => s.showBusVehicles);
+  const showTrainVehicles = useTransitStore((s) => s.showTrainVehicles);
+
   // ---- lifecycle ----------------------------------------------------------
 
   useEffect(() => {
     const cleanup = startPolling();
     return cleanup;
   }, [startPolling]);
+
+  // ---- derived data -------------------------------------------------------
+
+  const visibleVehicles = useMemo(
+    () =>
+      vehicles.filter((v) =>
+        v.type === "bus" ? showBusVehicles : showTrainVehicles
+      ),
+    [vehicles, showBusVehicles, showTrainVehicles]
+  );
+
+  // Split shapes into bus / train collections so toggles work independently
+  const busShapes = useMemo<GeoJSONFeatureCollection | null>(() => {
+    if (!shapes || !showBusRoutes) return null;
+    const features = shapes.features.filter(
+      (f) => f.properties.route_type !== "rail"
+    );
+    return features.length ? { type: "FeatureCollection", features } : null;
+  }, [shapes, showBusRoutes]);
+
+  const trainShapes = useMemo<GeoJSONFeatureCollection | null>(() => {
+    if (!shapes || !showTrainRoutes) return null;
+    const features = shapes.features.filter(
+      (f) => f.properties.route_type === "rail"
+    );
+    return features.length ? { type: "FeatureCollection", features } : null;
+  }, [shapes, showTrainRoutes]);
 
   // ---- render -------------------------------------------------------------
 
@@ -70,25 +83,24 @@ export default function TransitMap() {
         showsUserLocation
         showsMyLocationButton
       >
-        {shapes && (
+        {busShapes && (
           <Geojson
-            geojson={shapes as any}
-            strokeColor="#1565c0"
+            geojson={busShapes as any}
+            strokeColor="#66bb6a"
             strokeWidth={2}
           />
         )}
 
-        {vehicles.map((v) => (
-          <Marker
-            key={v.id}
-            coordinate={{ latitude: v.displayLat, longitude: v.displayLon }}
-            title={`${v.type === "bus" ? "Bus" : "Train"} ${v.route}`}
-            description={`→ ${v.destination}  |  ${Math.round(v.speed)} mph`}
-            pinColor={markerColor(v)}
-            rotation={v.heading}
-            anchor={{ x: 0.5, y: 0.5 }}
-            flat
+        {trainShapes && (
+          <Geojson
+            geojson={trainShapes as any}
+            strokeColor="#42a5f5"
+            strokeWidth={3}
           />
+        )}
+
+        {visibleVehicles.map((v) => (
+          <VehicleMarker key={v.id} vehicle={v} />
         ))}
       </MapView>
     </View>

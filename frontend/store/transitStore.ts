@@ -37,6 +37,12 @@ interface TransitState {
   shapes: GeoJSONFeatureCollection | null;
   shapesLoaded: boolean;
 
+  // ---- visibility toggles --------------------------------------------------
+  showBusRoutes: boolean;
+  showTrainRoutes: boolean;
+  showBusVehicles: boolean;
+  showTrainVehicles: boolean;
+
   // ---- status --------------------------------------------------------------
   loading: boolean;
   error: string | null;
@@ -46,6 +52,7 @@ interface TransitState {
   fetchShapes: () => Promise<void>;
   tick: () => void;
   setRoutes: (bus: string, train: string) => void;
+  toggleLayer: (layer: "showBusRoutes" | "showTrainRoutes" | "showBusVehicles" | "showTrainVehicles") => void;
   startPolling: () => () => void;
 }
 
@@ -63,6 +70,11 @@ export const useTransitStore = create<TransitState>((set, get) => ({
 
   shapes: null,
   shapesLoaded: false,
+
+  showBusRoutes: true,
+  showTrainRoutes: true,
+  showBusVehicles: true,
+  showTrainVehicles: true,
 
   loading: false,
   error: null,
@@ -118,6 +130,12 @@ export const useTransitStore = create<TransitState>((set, get) => ({
 
   tick: () => {
     set({ vehicles: getInterpolatedPositions() });
+  },
+
+  // ---------- visibility toggles ---------------------------------------------
+
+  toggleLayer: (layer) => {
+    set((s) => ({ [layer]: !s[layer] }));
   },
 
   // ---------- update watched routes -----------------------------------------
