@@ -1,12 +1,8 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
-import { StyleSheet, View, Text, Platform } from "react-native";
-import MapView, { Marker, Region } from "react-native-maps";
-import {
-  VehiclePosition,
-  InterpolatedVehicle,
-  updateVehiclePositions,
-  getInterpolatedPositions,
-} from "../utils/interpolateMovement";
+import React, { useEffect, useRef } from "react";
+import { StyleSheet, View, Text } from "react-native";
+import MapView, { Marker, Geojson, Region } from "react-native-maps";
+import type { InterpolatedVehicle } from "../utils/interpolateMovement";
+import { useTransitStore } from "../store/transitStore";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -18,15 +14,6 @@ const CHICAGO_CENTER: Region = {
   latitudeDelta: 0.15,
   longitudeDelta: 0.15,
 };
-
-const POLL_MS = 15_000;
-const FRAME_MS = 1_000; // interpolation refresh rate
-
-const API_BASE =
-  Platform.OS === "web" ? "/api" : process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001/api";
-
-const BUS_ROUTES = "22,36,151"; // default watched bus routes
-const TRAIN_ROUTES = "Red,Blue,Brn"; // default watched train lines
 
 // ---------------------------------------------------------------------------
 // Marker colors per route type
@@ -54,48 +41,17 @@ function markerColor(v: InterpolatedVehicle): string {
 
 export default function TransitMap() {
   const mapRef = useRef<MapView>(null);
-  const [vehicles, setVehicles] = useState<InterpolatedVehicle[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  // ---- data fetching ------------------------------------------------------
-
-  const fetchVehicles = useCallback(async () => {
-    try {
-      const [busRes, trainRes] = await Promise.all([
-        fetch(`${API_BASE}/buses/vehicles?routes=${BUS_ROUTES}`),
-        fetch(`${API_BASE}/trains/positions?routes=${TRAIN_ROUTES}`),
-      ]);
-
-      if (!busRes.ok || !trainRes.ok) {
-        throw new Error(`HTTP ${busRes.status} / ${trainRes.status}`);
-      }
-
-      const [busData, trainData] = await Promise.all([busRes.json(), trainRes.json()]);
-      const all: VehiclePosition[] = [...busData.vehicles, ...trainData.vehicles];
-
-      updateVehiclePositions(all);
-      setVehicles(getInterpolatedPositions());
-      setError(null);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Fetch failed");
-    }
-  }, []);
+  const vehicles = useTransitStore((s) => s.vehicles);
+  const shapes = useTransitStore((s) => s.shapes);
+  const error = useTransitStore((s) => s.error);
+  const startPolling = useTransitStore((s) => s.startPolling);
 
   // ---- lifecycle ----------------------------------------------------------
 
   useEffect(() => {
-    fetchVehicles();
-    const poll = setInterval(fetchVehicles, POLL_MS);
-    return () => clearInterval(poll);
-  }, [fetchVehicles]);
-
-  // Interpolation tick – runs between polls to animate markers
-  useEffect(() => {
-    const tick = setInterval(() => {
-      setVehicles(getInterpolatedPositions());
-    }, FRAME_MS);
-    return () => clearInterval(tick);
-  }, []);
+    const cleanup = startPolling();
+    return cleanup;
+  }, [startPolling]);
 
   // ---- render -------------------------------------------------------------
 
@@ -114,6 +70,14 @@ export default function TransitMap() {
         showsUserLocation
         showsMyLocationButton
       >
+        {shapes && (
+          <Geojson
+            geojson={shapes as any}
+            strokeColor="#1565c0"
+            strokeWidth={2}
+          />
+        )}
+
         {vehicles.map((v) => (
           <Marker
             key={v.id}
