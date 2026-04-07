@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef } from "react";
 import { StyleSheet, View, Text } from "react-native";
-import MapView, { Geojson, Region } from "react-native-maps";
+import MapView, { Region } from "react-native-maps";
 import { useTransitStore } from "../store/transitStore";
 import VehicleMarker from "./VehicleMarker";
-import type { GeoJSONFeatureCollection } from "../services/api";
+import RouteLayer from "./RouteLayer";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -23,12 +23,8 @@ const CHICAGO_CENTER: Region = {
 export default function TransitMap() {
   const mapRef = useRef<MapView>(null);
   const vehicles = useTransitStore((s) => s.vehicles);
-  const shapes = useTransitStore((s) => s.shapes);
   const error = useTransitStore((s) => s.error);
   const startPolling = useTransitStore((s) => s.startPolling);
-
-  const showBusRoutes = useTransitStore((s) => s.showBusRoutes);
-  const showTrainRoutes = useTransitStore((s) => s.showTrainRoutes);
   const showBusVehicles = useTransitStore((s) => s.showBusVehicles);
   const showTrainVehicles = useTransitStore((s) => s.showTrainVehicles);
 
@@ -49,23 +45,6 @@ export default function TransitMap() {
     [vehicles, showBusVehicles, showTrainVehicles]
   );
 
-  // Split shapes into bus / train collections so toggles work independently
-  const busShapes = useMemo<GeoJSONFeatureCollection | null>(() => {
-    if (!shapes || !showBusRoutes) return null;
-    const features = shapes.features.filter(
-      (f) => f.properties.route_type !== "rail"
-    );
-    return features.length ? { type: "FeatureCollection", features } : null;
-  }, [shapes, showBusRoutes]);
-
-  const trainShapes = useMemo<GeoJSONFeatureCollection | null>(() => {
-    if (!shapes || !showTrainRoutes) return null;
-    const features = shapes.features.filter(
-      (f) => f.properties.route_type === "rail"
-    );
-    return features.length ? { type: "FeatureCollection", features } : null;
-  }, [shapes, showTrainRoutes]);
-
   // ---- render -------------------------------------------------------------
 
   return (
@@ -83,21 +62,7 @@ export default function TransitMap() {
         showsUserLocation
         showsMyLocationButton
       >
-        {busShapes && (
-          <Geojson
-            geojson={busShapes as any}
-            strokeColor="#66bb6a"
-            strokeWidth={2}
-          />
-        )}
-
-        {trainShapes && (
-          <Geojson
-            geojson={trainShapes as any}
-            strokeColor="#42a5f5"
-            strokeWidth={3}
-          />
-        )}
+        <RouteLayer />
 
         {visibleVehicles.map((v) => (
           <VehicleMarker key={v.id} vehicle={v} />

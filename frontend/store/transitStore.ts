@@ -3,7 +3,10 @@ import {
   fetchBusVehicles,
   fetchTrainPositions,
   fetchAllShapes,
+  fetchRouteShapes,
+  fetchAvailableRoutes,
   type GeoJSONFeatureCollection,
+  type RouteInfo,
 } from "../services/api";
 import {
   type VehiclePosition,
@@ -33,9 +36,14 @@ interface TransitState {
   busRoutes: string;
   trainRoutes: string;
 
-  // ---- static GTFS shapes --------------------------------------------------
+  // ---- static GTFS shapes (legacy loader) ----------------------------------
   shapes: GeoJSONFeatureCollection | null;
   shapesLoaded: boolean;
+
+  // ---- generated route shapes (generateGeoJSON.js) -------------------------
+  routeShapes: GeoJSONFeatureCollection | null;
+  availableRoutes: RouteInfo[];
+  selectedRoutes: string[] | null; // null = show all, [] = show none
 
   // ---- visibility toggles --------------------------------------------------
   showBusRoutes: boolean;
@@ -50,9 +58,13 @@ interface TransitState {
   // ---- actions -------------------------------------------------------------
   fetchVehicles: () => Promise<void>;
   fetchShapes: () => Promise<void>;
+  fetchRouteShapes: () => Promise<void>;
   tick: () => void;
   setRoutes: (bus: string, train: string) => void;
   toggleLayer: (layer: "showBusRoutes" | "showTrainRoutes" | "showBusVehicles" | "showTrainVehicles") => void;
+  toggleRoute: (routeId: string) => void;
+  selectAllRoutes: () => void;
+  deselectAllRoutes: () => void;
   startPolling: () => () => void;
 }
 
@@ -70,6 +82,10 @@ export const useTransitStore = create<TransitState>((set, get) => ({
 
   shapes: null,
   shapesLoaded: false,
+
+  routeShapes: null,
+  availableRoutes: [],
+  selectedRoutes: null, // null = all visible
 
   showBusRoutes: true,
   showTrainRoutes: true,
@@ -126,6 +142,23 @@ export const useTransitStore = create<TransitState>((set, get) => ({
     }
   },
 
+  // ---------- fetch generated route shapes (once) ---------------------------
+
+  fetchRouteShapes: async () => {
+    try {
+      const [routeShapes, availableRoutes] = await Promise.all([
+        fetchRouteShapes(),
+        fetchAvailableRoutes(),
+      ]);
+      set({ routeShapes, availableRoutes });
+    } catch (err: unknown) {
+      console.warn(
+        "[transitStore] route shapes load failed:",
+        err instanceof Error ? err.message : err
+      );
+    }
+  },
+
   // ---------- interpolation tick --------------------------------------------
 
   tick: () => {
@@ -137,6 +170,25 @@ export const useTransitStore = create<TransitState>((set, get) => ({
   toggleLayer: (layer) => {
     set((s) => ({ [layer]: !s[layer] }));
   },
+
+  // ---------- per-route selection -------------------------------------------
+
+  toggleRoute: (routeId) => {
+    const { selectedRoutes, availableRoutes } = get();
+    if (selectedRoutes === null) {
+      // Currently showing all → switch to all-except-this
+      const allIds = availableRoutes.map((r) => r.route_id);
+      set({ selectedRoutes: allIds.filter((id) => id !== routeId) });
+    } else if (selectedRoutes.includes(routeId)) {
+      set({ selectedRoutes: selectedRoutes.filter((id) => id !== routeId) });
+    } else {
+      set({ selectedRoutes: [...selectedRoutes, routeId] });
+    }
+  },
+
+  selectAllRoutes: () => set({ selectedRoutes: null }),
+
+  deselectAllRoutes: () => set({ selectedRoutes: [] }),
 
   // ---------- update watched routes -----------------------------------------
 
@@ -154,6 +206,7 @@ export const useTransitStore = create<TransitState>((set, get) => ({
     // Initial fetches
     fetchVehicles();
     fetchShapes();
+    get().fetchRouteShapes();
 
     // 15 s vehicle poll
     const pollId = setInterval(fetchVehicles, POLL_MS);

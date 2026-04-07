@@ -5,6 +5,7 @@ const cors = require("cors");
 const path = require("path");
 const { loadAllShapes } = require("./services/gtfsLoader");
 const apiRouter = require("./routes/api");
+const staticDataRouter = require("./routes/staticData");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -40,6 +41,7 @@ app.use(express.json());
 
   // ---- Routes -------------------------------------------------------------
   app.use("/api", apiRouter);
+  app.use("/api/static", staticDataRouter);
 
   // ---- Health check -------------------------------------------------------
   app.get("/health", (_req, res) => res.json({ status: "ok" }));
