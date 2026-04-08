@@ -9,10 +9,14 @@ FROM node:20-alpine AS frontend-build
 
 WORKDIR /app
 
-COPY frontend/package.json frontend/package-lock.json* ./
+# Copy all frontend files (app.json, tsconfig, index.ts, source, etc.)
+COPY frontend/ ./
+
+# Install deps (including devDependencies needed for build)
 RUN npm install
 
-COPY frontend/ ./
+# Build web bundle — CI=1 suppresses interactive prompts
+ENV CI=1
 RUN npx expo export --platform web
 
 # ---- Stage 2: Production backend --------------------------------------------

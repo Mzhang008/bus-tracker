@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "CTA Transit Tracker",
+    "slug": "cta-transit-tracker",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "platforms": ["ios", "android", "web"],
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": []
+  }
+}
