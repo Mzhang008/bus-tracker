@@ -1,0 +1,159 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 720" font-family="'Segoe UI',system-ui,sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#546e7a"/></marker>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#1565c0"/></marker>
+    <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#2e7d32"/></marker>
+    <filter id="shadow" x="-4%" y="-4%" width="108%" height="112%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.12"/></filter>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f5f7fa"/><stop offset="100%" stop-color="#e8edf2"/></linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1000" height="720" rx="12" fill="url(#bg)"/>
+
+  <!-- Title -->
+  <text x="500" y="38" text-anchor="middle" font-size="20" font-weight="700" fill="#212121">CTA Transit Tracker — Architecture &amp; Data Flow</text>
+
+  <!-- ===== EXTERNAL DATA SOURCES (top) ===== -->
+  <text x="500" y="72" text-anchor="middle" font-size="11" fill="#78909c" font-weight="600" letter-spacing="2">EXTERNAL DATA SOURCES</text>
+
+  <!-- CTA Bus Tracker API -->
+  <rect x="120" y="86" width="200" height="54" rx="8" fill="#c62828" filter="url(#shadow)"/>
+  <text x="220" y="110" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">CTA Bus Tracker API</text>
+  <text x="220" y="128" text-anchor="middle" font-size="10" fill="#ffcdd2">REST · JSON · getvehicles</text>
+
+  <!-- CTA Train Tracker API -->
+  <rect x="400" y="86" width="200" height="54" rx="8" fill="#1565c0" filter="url(#shadow)"/>
+  <text x="500" y="110" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">CTA Train Tracker API</text>
+  <text x="500" y="128" text-anchor="middle" font-size="10" fill="#bbdefb">REST · JSON · ttpositions</text>
+
+  <!-- GTFS Static Feed -->
+  <rect x="680" y="86" width="200" height="54" rx="8" fill="#6d4c41" filter="url(#shadow)"/>
+  <text x="780" y="110" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">CTA GTFS Static Feed</text>
+  <text x="780" y="128" text-anchor="middle" font-size="10" fill="#d7ccc8">shapes.txt · routes.txt · trips.txt</text>
+
+  <!-- Arrows from APIs down -->
+  <line x1="220" y1="140" x2="220" y2="190" stroke="#c62828" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="500" y1="140" x2="500" y2="190" stroke="#1565c0" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="780" y1="140" x2="780" y2="190" stroke="#546e7a" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ===== BACKEND LAYER ===== -->
+  <rect x="40" y="195" width="920" height="200" rx="12" fill="#fff" stroke="#b0bec5" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="40" y="195" width="920" height="30" rx="12" fill="#37474f"/>
+  <rect x="40" y="212" width="920" height="13" fill="#37474f"/>
+  <text x="500" y="216" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">BACKEND  ·  Node.js + Express  ·  Port 8080</text>
+
+  <!-- ctaProxy.js -->
+  <rect x="80" y="240" width="240" height="64" rx="8" fill="#e8f5e9" stroke="#66bb6a" stroke-width="1.5"/>
+  <text x="200" y="262" text-anchor="middle" font-size="12" font-weight="700" fill="#2e7d32">ctaProxy.js</text>
+  <text x="200" y="278" text-anchor="middle" font-size="10" fill="#558b2f">Fetch · Normalize · Proxy</text>
+  <text x="200" y="294" text-anchor="middle" font-size="10" fill="#558b2f">/api/buses · /api/trains</text>
+
+  <!-- node-cache -->
+  <rect x="380" y="240" width="140" height="64" rx="8" fill="#fff3e0" stroke="#ffb74d" stroke-width="1.5"/>
+  <text x="450" y="262" text-anchor="middle" font-size="12" font-weight="700" fill="#e65100">node-cache</text>
+  <text x="450" y="280" text-anchor="middle" font-size="10" fill="#ef6c00">In-memory</text>
+  <text x="450" y="294" text-anchor="middle" font-size="10" fill="#ef6c00">TTL: 15 seconds</text>
+
+  <!-- Arrow proxy → cache -->
+  <line x1="320" y1="272" x2="375" y2="272" stroke="#546e7a" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- staticData.js -->
+  <rect x="580" y="240" width="200" height="64" rx="8" fill="#e3f2fd" stroke="#42a5f5" stroke-width="1.5"/>
+  <text x="680" y="262" text-anchor="middle" font-size="12" font-weight="700" fill="#1565c0">staticData.js</text>
+  <text x="680" y="278" text-anchor="middle" font-size="10" fill="#1976d2">/api/static/routes.geojson</text>
+  <text x="680" y="294" text-anchor="middle" font-size="10" fill="#1976d2">ETag · 304 · 24h cache</text>
+
+  <!-- generateGeoJSON.js -->
+  <rect x="820" y="240" width="120" height="64" rx="8" fill="#f3e5f5" stroke="#ab47bc" stroke-width="1.5"/>
+  <text x="880" y="260" text-anchor="middle" font-size="11" font-weight="700" fill="#7b1fa2">generate</text>
+  <text x="880" y="275" text-anchor="middle" font-size="11" font-weight="700" fill="#7b1fa2">GeoJSON.js</text>
+  <text x="880" y="292" text-anchor="middle" font-size="10" fill="#8e24aa">Offline CLI</text>
+
+  <!-- Arrow generate → staticData -->
+  <line x1="820" y1="272" x2="785" y2="272" stroke="#ab47bc" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- server.js bar -->
+  <rect x="80" y="322" width="860" height="36" rx="6" fill="#eceff1"/>
+  <text x="500" y="345" text-anchor="middle" font-size="11" font-weight="600" fill="#546e7a">server.js  ·  CORS  ·  Static file serving (production)  ·  Express Router  ·  Tini init</text>
+
+  <!-- Response labels -->
+  <rect x="110" y="370" width="120" height="20" rx="4" fill="#e8f5e9"/>
+  <text x="170" y="384" text-anchor="middle" font-size="9" font-weight="600" fill="#2e7d32">{ vehicles[], ts }</text>
+
+  <rect x="450" y="370" width="120" height="20" rx="4" fill="#e3f2fd"/>
+  <text x="510" y="384" text-anchor="middle" font-size="9" font-weight="600" fill="#1565c0">FeatureCollection</text>
+
+  <!-- Arrows down from backend -->
+  <line x1="170" y1="395" x2="170" y2="438" stroke="#2e7d32" stroke-width="2" marker-end="url(#arrow-green)"/>
+  <text x="178" y="423" font-size="9" fill="#2e7d32" font-weight="600">every 15s</text>
+
+  <line x1="510" y1="395" x2="510" y2="438" stroke="#1565c0" stroke-width="2" marker-end="url(#arrow-blue)"/>
+  <text x="518" y="423" font-size="9" fill="#1565c0" font-weight="600">once on load</text>
+
+  <!-- ===== FRONTEND LAYER ===== -->
+  <rect x="40" y="445" width="920" height="240" rx="12" fill="#fff" stroke="#b0bec5" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="40" y="445" width="920" height="30" rx="12" fill="#1b5e20"/>
+  <rect x="40" y="462" width="920" height="13" fill="#1b5e20"/>
+  <text x="500" y="466" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">FRONTEND  ·  Expo (React Native for Web + Mobile)  ·  TypeScript</text>
+
+  <!-- api.ts -->
+  <rect x="80" y="490" width="160" height="50" rx="8" fill="#e0f2f1" stroke="#4db6ac" stroke-width="1.5"/>
+  <text x="160" y="512" text-anchor="middle" font-size="12" font-weight="700" fill="#00695c">api.ts</text>
+  <text x="160" y="528" text-anchor="middle" font-size="10" fill="#00897b">Typed fetch + AbortController</text>
+
+  <!-- transitStore.ts (Zustand) -->
+  <rect x="280" y="490" width="200" height="50" rx="8" fill="#fff8e1" stroke="#ffd54f" stroke-width="1.5"/>
+  <text x="380" y="512" text-anchor="middle" font-size="12" font-weight="700" fill="#f57f17">transitStore.ts</text>
+  <text x="380" y="528" text-anchor="middle" font-size="10" fill="#f9a825">Zustand · polling · toggles · selection</text>
+
+  <!-- interpolateMovement.ts -->
+  <rect x="520" y="490" width="200" height="50" rx="8" fill="#fce4ec" stroke="#ef5350" stroke-width="1.5"/>
+  <text x="620" y="512" text-anchor="middle" font-size="12" font-weight="700" fill="#c62828">interpolateMovement.ts</text>
+  <text x="620" y="528" text-anchor="middle" font-size="10" fill="#d32f2f">Turf.js · dead-reckoning · lerp</text>
+
+  <!-- Arrows between frontend modules -->
+  <line x1="240" y1="515" x2="275" y2="515" stroke="#546e7a" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="480" y1="515" x2="515" y2="515" stroke="#546e7a" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- 1s tick label -->
+  <rect x="760" y="490" width="100" height="50" rx="8" fill="#f3e5f5" stroke="#ce93d8" stroke-width="1.5"/>
+  <text x="810" y="512" text-anchor="middle" font-size="11" font-weight="700" fill="#7b1fa2">1s tick</text>
+  <text x="810" y="528" text-anchor="middle" font-size="10" fill="#8e24aa">setInterval</text>
+
+  <line x1="720" y1="515" x2="755" y2="515" stroke="#546e7a" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Components row -->
+  <rect x="80" y="560" width="140" height="50" rx="8" fill="#e8eaf6" stroke="#7986cb" stroke-width="1.5"/>
+  <text x="150" y="582" text-anchor="middle" font-size="12" font-weight="700" fill="#283593">TransitMap</text>
+  <text x="150" y="598" text-anchor="middle" font-size="10" fill="#3949ab">react-native-maps</text>
+
+  <rect x="260" y="560" width="140" height="50" rx="8" fill="#e8eaf6" stroke="#7986cb" stroke-width="1.5"/>
+  <text x="330" y="582" text-anchor="middle" font-size="12" font-weight="700" fill="#283593">RouteLayer</text>
+  <text x="330" y="598" text-anchor="middle" font-size="10" fill="#3949ab">Geojson polylines</text>
+
+  <rect x="440" y="560" width="140" height="50" rx="8" fill="#e8eaf6" stroke="#7986cb" stroke-width="1.5"/>
+  <text x="510" y="582" text-anchor="middle" font-size="12" font-weight="700" fill="#283593">VehicleMarker</text>
+  <text x="510" y="598" text-anchor="middle" font-size="10" fill="#3949ab">React.memo · flat</text>
+
+  <rect x="620" y="560" width="170" height="50" rx="8" fill="#e8eaf6" stroke="#7986cb" stroke-width="1.5"/>
+  <text x="705" y="582" text-anchor="middle" font-size="12" font-weight="700" fill="#283593">RouteToggleOverlay</text>
+  <text x="705" y="598" text-anchor="middle" font-size="10" fill="#3949ab">Switches · per-route chips</text>
+
+  <!-- Arrows store → components -->
+  <line x1="340" y1="540" x2="150" y2="556" stroke="#f57f17" stroke-width="1.2" stroke-dasharray="4 2" marker-end="url(#arrow)"/>
+  <line x1="360" y1="540" x2="330" y2="556" stroke="#f57f17" stroke-width="1.2" stroke-dasharray="4 2" marker-end="url(#arrow)"/>
+  <line x1="400" y1="540" x2="510" y2="556" stroke="#f57f17" stroke-width="1.2" stroke-dasharray="4 2" marker-end="url(#arrow)"/>
+  <line x1="420" y1="540" x2="705" y2="556" stroke="#f57f17" stroke-width="1.2" stroke-dasharray="4 2" marker-end="url(#arrow)"/>
+
+  <!-- Deploy target -->
+  <rect x="80" y="632" width="860" height="36" rx="6" fill="#e8f5e9" stroke="#66bb6a" stroke-width="1"/>
+  <text x="500" y="655" text-anchor="middle" font-size="11" font-weight="600" fill="#2e7d32">Deployed via Docker (multi-stage)  →  Fly.io  ·  ord region (Chicago)  ·  512MB  ·  auto-suspend</text>
+
+  <!-- Legend -->
+  <rect x="40" y="690" width="920" height="24" rx="4" fill="none"/>
+  <circle cx="80" cy="702" r="5" fill="#2e7d32"/><text x="90" y="706" font-size="9" fill="#546e7a">Real-time data (15s poll)</text>
+  <circle cx="250" cy="702" r="5" fill="#1565c0"/><text x="260" y="706" font-size="9" fill="#546e7a">Static shapes (one-time)</text>
+  <circle cx="400" cy="702" r="5" fill="#f57f17"/><text x="410" y="706" font-size="9" fill="#546e7a">Zustand subscriptions</text>
+  <circle cx="560" cy="702" r="5" fill="#7b1fa2"/><text x="570" y="706" font-size="9" fill="#546e7a">Offline build step</text>
+  <circle cx="710" cy="702" r="5" fill="#ef6c00"/><text x="720" y="706" font-size="9" fill="#546e7a">In-memory cache</text>
+</svg>
