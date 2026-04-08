@@ -7,10 +7,10 @@
 # ---- Stage 1: Build frontend ------------------------------------------------
 FROM node:20-alpine AS frontend-build
 
-WORKDIR /app/frontend
+WORKDIR /app
 
 COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm ci --ignore-scripts
+RUN npm install
 
 COPY frontend/ ./
 RUN npx expo export --platform web
@@ -25,17 +25,13 @@ WORKDIR /app
 
 # Install backend dependencies
 COPY backend/package.json backend/package-lock.json* ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm install --omit=dev && npm cache clean --force
 
 # Copy backend source
 COPY backend/ ./
 
-# Copy GTFS data if present (routes.geojson, gtfs/*.txt)
-# These can also be mounted as volumes at runtime
-COPY backend/data/ ./data/ 2>/dev/null || true
-
 # Copy built frontend into a static directory the backend can serve
-COPY --from=frontend-build /app/frontend/dist ./public
+COPY --from=frontend-build /app/dist ./public
 
 # Non-root user for security
 RUN addgroup -S app && adduser -S app -G app && chown -R app:app /app
