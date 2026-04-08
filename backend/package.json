@@ -1,0 +1,16 @@
+{
+  "name": "cta-tracker-backend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "generate-geojson": "node scripts/generateGeoJSON.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0",
+    "node-cache": "^5.1.2"
+  }
+}

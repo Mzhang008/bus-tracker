@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
+const fs = require("fs");
 const { loadAllShapes } = require("./services/gtfsLoader");
 const apiRouter = require("./routes/api");
 const staticDataRouter = require("./routes/staticData");
@@ -42,6 +43,17 @@ app.use(express.json());
   // ---- Routes -------------------------------------------------------------
   app.use("/api", apiRouter);
   app.use("/api/static", staticDataRouter);
+
+  // ---- Serve frontend static build in production --------------------------
+  const publicDir = path.join(__dirname, "public");
+  if (fs.existsSync(publicDir)) {
+    app.use(express.static(publicDir));
+    // SPA fallback: send index.html for any non-API route
+    app.get(/^\/(?!api\/).*/, (_req, res) => {
+      res.sendFile(path.join(publicDir, "index.html"));
+    });
+    console.log("[server] Serving frontend from", publicDir);
+  }
 
   // ---- Health check -------------------------------------------------------
   app.get("/health", (_req, res) => res.json({ status: "ok" }));
