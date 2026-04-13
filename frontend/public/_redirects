@@ -1,0 +1,11 @@
+# Cloudflare Pages redirects / rewrites
+# Syntax: <source> <destination> <status>
+#   200 = transparent proxy (no redirect, preserves URL in browser)
+#   301/302 = actual redirect
+
+# Proxy API calls to the Fly.io backend (same-origin from frontend's POV)
+# Replace the destination host with your actual Fly.io app URL
+/api/*  https://cta-transit-tracker.fly.dev/api/:splat  200
+
+# SPA fallback — serve index.html for any non-file route so React Navigation works
+/*  /index.html  200

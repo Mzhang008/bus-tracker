@@ -1,0 +1,20 @@
+# Cloudflare Pages custom headers
+# Syntax: per-path glob followed by indented header lines
+
+# Immutable hashed assets — cache forever
+/_expo/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# HTML entry — never cache (so new deploys are picked up instantly)
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+# Security headers for every response
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(self)
