@@ -1,14 +1,14 @@
 import React from "react";
 import { StyleSheet, View, StatusBar } from "react-native";
 import TransitMap from "./components/TransitMap";
-import RouteToggleOverlay from "./components/RouteToggleOverlay";
+import FilterMenu from "./components/FilterMenu";
 
 export default function App() {
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" />
       <TransitMap />
-      <RouteToggleOverlay />
+      <FilterMenu />
     </View>
   );
 }

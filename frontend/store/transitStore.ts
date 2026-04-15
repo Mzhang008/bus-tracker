@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import { create } from "zustand";
 import {
   fetchBusVehicles,
@@ -21,6 +22,32 @@ import {
 
 const POLL_MS = 15_000;
 const INTERPOLATION_MS = 1_000;
+const STORAGE_KEY = "cta-tracker.selectedRoutes";
+
+// ---------------------------------------------------------------------------
+// Persistence (web only — native skipped to avoid AsyncStorage dep)
+// ---------------------------------------------------------------------------
+
+function loadPersistedSelection(): string[] {
+  if (Platform.OS !== "web" || typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistSelection(ids: string[]): void {
+  if (Platform.OS !== "web" || typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
+  } catch {
+    /* quota / disabled — non-fatal */
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Store shape
@@ -32,10 +59,6 @@ interface TransitState {
   rawVehicles: VehiclePosition[];
   lastFetchTs: number | null;
 
-  // ---- watched routes (user-configurable) ----------------------------------
-  busRoutes: string;
-  trainRoutes: string;
-
   // ---- static GTFS shapes (legacy loader) ----------------------------------
   shapes: GeoJSONFeatureCollection | null;
   shapesLoaded: boolean;
@@ -43,7 +66,7 @@ interface TransitState {
   // ---- generated route shapes (generateGeoJSON.js) -------------------------
   routeShapes: GeoJSONFeatureCollection | null;
   availableRoutes: RouteInfo[];
-  selectedRoutes: string[] | null; // null = show all, [] = show none
+  selectedRoutes: string[]; // empty = nothing selected
 
   // ---- visibility toggles --------------------------------------------------
   showBusRoutes: boolean;
@@ -60,12 +83,30 @@ interface TransitState {
   fetchShapes: () => Promise<void>;
   fetchRouteShapes: () => Promise<void>;
   tick: () => void;
-  setRoutes: (bus: string, train: string) => void;
   toggleLayer: (layer: "showBusRoutes" | "showTrainRoutes" | "showBusVehicles" | "showTrainVehicles") => void;
   toggleRoute: (routeId: string) => void;
-  selectAllRoutes: () => void;
-  deselectAllRoutes: () => void;
+  selectAllOfType: (type: "bus" | "rail") => void;
+  clearAllOfType: (type: "bus" | "rail") => void;
   startPolling: () => () => void;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function partitionByType(
+  selectedRoutes: string[],
+  availableRoutes: RouteInfo[]
+): { bus: string[]; rail: string[] } {
+  const typeById = new Map(availableRoutes.map((r) => [r.route_id, r.route_type]));
+  const bus: string[] = [];
+  const rail: string[] = [];
+  for (const id of selectedRoutes) {
+    const t = typeById.get(id);
+    if (t === "rail") rail.push(id);
+    else if (t === "bus") bus.push(id);
+  }
+  return { bus, rail };
 }
 
 // ---------------------------------------------------------------------------
@@ -77,20 +118,18 @@ export const useTransitStore = create<TransitState>((set, get) => ({
   rawVehicles: [],
   lastFetchTs: null,
 
-  busRoutes: "22,36,151",
-  trainRoutes: "Red,Blue,Brn",
-
   shapes: null,
   shapesLoaded: false,
 
   routeShapes: null,
   availableRoutes: [],
-  selectedRoutes: null, // null = all visible
+  selectedRoutes: loadPersistedSelection(),
 
-  showBusRoutes: true,
-  showTrainRoutes: true,
-  showBusVehicles: true,
-  showTrainVehicles: true,
+  // Default OFF — user opts in via filter menu
+  showBusRoutes: false,
+  showTrainRoutes: false,
+  showBusVehicles: false,
+  showTrainVehicles: false,
 
   loading: false,
   error: null,
@@ -98,13 +137,22 @@ export const useTransitStore = create<TransitState>((set, get) => ({
   // ---------- fetch live positions ------------------------------------------
 
   fetchVehicles: async () => {
-    const { busRoutes, trainRoutes } = get();
-    set({ loading: true });
+    const { selectedRoutes, availableRoutes } = get();
 
+    // Nothing selected → clear vehicles, skip network
+    if (selectedRoutes.length === 0 || availableRoutes.length === 0) {
+      updateVehiclePositions([]);
+      set({ rawVehicles: [], vehicles: [], lastFetchTs: Date.now(), error: null });
+      return;
+    }
+
+    const { bus, rail } = partitionByType(selectedRoutes, availableRoutes);
+
+    set({ loading: true });
     try {
       const [buses, trains] = await Promise.all([
-        fetchBusVehicles(busRoutes),
-        fetchTrainPositions(trainRoutes),
+        bus.length ? fetchBusVehicles(bus.join(",")) : Promise.resolve([]),
+        rail.length ? fetchTrainPositions(rail.join(",")) : Promise.resolve([]),
       ]);
 
       const all = [...buses, ...trains];
@@ -151,6 +199,12 @@ export const useTransitStore = create<TransitState>((set, get) => ({
         fetchAvailableRoutes(),
       ]);
       set({ routeShapes, availableRoutes });
+
+      // If we restored a persisted selection, kick off a vehicle fetch now
+      // that we know which routes are bus vs rail.
+      if (get().selectedRoutes.length > 0) {
+        get().fetchVehicles();
+      }
     } catch (err: unknown) {
       console.warn(
         "[transitStore] route shapes load failed:",
@@ -175,26 +229,55 @@ export const useTransitStore = create<TransitState>((set, get) => ({
 
   toggleRoute: (routeId) => {
     const { selectedRoutes, availableRoutes } = get();
-    if (selectedRoutes === null) {
-      // Currently showing all → switch to all-except-this
-      const allIds = availableRoutes.map((r) => r.route_id);
-      set({ selectedRoutes: allIds.filter((id) => id !== routeId) });
-    } else if (selectedRoutes.includes(routeId)) {
-      set({ selectedRoutes: selectedRoutes.filter((id) => id !== routeId) });
-    } else {
-      set({ selectedRoutes: [...selectedRoutes, routeId] });
+    const isSelected = selectedRoutes.includes(routeId);
+    const next = isSelected
+      ? selectedRoutes.filter((id) => id !== routeId)
+      : [...selectedRoutes, routeId];
+
+    // First selection of a type → auto-enable that type's layers so
+    // the user actually sees something on the map.
+    const patch: Partial<TransitState> = { selectedRoutes: next };
+    if (!isSelected) {
+      const meta = availableRoutes.find((r) => r.route_id === routeId);
+      if (meta?.route_type === "bus") {
+        patch.showBusVehicles = true;
+        patch.showBusRoutes = true;
+      } else if (meta?.route_type === "rail") {
+        patch.showTrainVehicles = true;
+        patch.showTrainRoutes = true;
+      }
     }
+
+    set(patch);
+    persistSelection(next);
+    get().fetchVehicles();
   },
 
-  selectAllRoutes: () => set({ selectedRoutes: null }),
+  selectAllOfType: (type) => {
+    const { selectedRoutes, availableRoutes } = get();
+    const idsOfType = availableRoutes
+      .filter((r) => r.route_type === type)
+      .map((r) => r.route_id);
+    const merged = Array.from(new Set([...selectedRoutes, ...idsOfType]));
 
-  deselectAllRoutes: () => set({ selectedRoutes: [] }),
+    set({
+      selectedRoutes: merged,
+      ...(type === "bus"
+        ? { showBusVehicles: true, showBusRoutes: true }
+        : { showTrainVehicles: true, showTrainRoutes: true }),
+    });
+    persistSelection(merged);
+    get().fetchVehicles();
+  },
 
-  // ---------- update watched routes -----------------------------------------
-
-  setRoutes: (bus, train) => {
-    set({ busRoutes: bus, trainRoutes: train });
-    // Immediately re-fetch with the new routes
+  clearAllOfType: (type) => {
+    const { selectedRoutes, availableRoutes } = get();
+    const dropIds = new Set(
+      availableRoutes.filter((r) => r.route_type === type).map((r) => r.route_id)
+    );
+    const next = selectedRoutes.filter((id) => !dropIds.has(id));
+    set({ selectedRoutes: next });
+    persistSelection(next);
     get().fetchVehicles();
   },
 
@@ -204,9 +287,9 @@ export const useTransitStore = create<TransitState>((set, get) => ({
     const { fetchVehicles, fetchShapes, tick } = get();
 
     // Initial fetches
-    fetchVehicles();
     fetchShapes();
     get().fetchRouteShapes();
+    fetchVehicles();
 
     // 15 s vehicle poll
     const pollId = setInterval(fetchVehicles, POLL_MS);

@@ -17,11 +17,14 @@ export interface VehiclePosition {
 }
 
 /**
- * Snapshot used by the map layer – includes the interpolated coordinates.
+ * Snapshot used by the map layer – includes the interpolated coordinates
+ * and a stable display heading (real-feed heading, falling back to a
+ * derived bearing or the last known heading when the vehicle is stationary).
  */
 export interface InterpolatedVehicle extends VehiclePosition {
   displayLat: number;
   displayLon: number;
+  displayHeading: number;
 }
 
 // ---- internal bookkeeping per vehicle ------------------------------------
@@ -30,10 +33,62 @@ interface VehicleState {
   prev: VehiclePosition;
   next: VehiclePosition;
   fetchedAt: number; // ms epoch when the "next" snapshot arrived
+  lastHeading: number; // last non-null heading we displayed
 }
 
 const POLL_INTERVAL_MS = 15_000;
+const MIN_BEARING_DISTANCE_M = 5; // ignore sub-5 m jitter when deriving bearing
 const vehicleStates = new Map<string, VehicleState>();
+
+// ---------------------------------------------------------------------------
+// Geo helpers
+// ---------------------------------------------------------------------------
+
+function toRad(deg: number): number {
+  return (deg * Math.PI) / 180;
+}
+function toDeg(rad: number): number {
+  return (rad * 180) / Math.PI;
+}
+
+/**
+ * Initial bearing from (lat1,lon1) → (lat2,lon2) in degrees clockwise from N.
+ * Returns NaN when the two points are identical.
+ */
+function bearingBetween(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  if (lat1 === lat2 && lon1 === lon2) return NaN;
+  const φ1 = toRad(lat1);
+  const φ2 = toRad(lat2);
+  const Δλ = toRad(lon2 - lon1);
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x =
+    Math.cos(φ1) * Math.sin(φ2) -
+    Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+/** Approximate great-circle distance between two coords (metres). */
+function distanceMeters(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const R = 6_371_000;
+  const φ1 = toRad(lat1);
+  const φ2 = toRad(lat2);
+  const Δφ = toRad(lat2 - lat1);
+  const Δλ = toRad(lon2 - lon1);
+  const a =
+    Math.sin(Δφ / 2) ** 2 +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -47,10 +102,26 @@ export function updateVehiclePositions(vehicles: VehiclePosition[]): void {
   const now = Date.now();
   for (const v of vehicles) {
     const existing = vehicleStates.get(v.id);
+    const prev = existing?.next ?? v;
+
+    // Derive a display heading: prefer the feed value, otherwise compute
+    // a bearing from prev → next, otherwise reuse the last known heading.
+    let lastHeading = existing?.lastHeading ?? 0;
+    if (Number.isFinite(v.heading) && v.heading > 0) {
+      lastHeading = v.heading;
+    } else {
+      const dist = distanceMeters(prev.lat, prev.lon, v.lat, v.lon);
+      if (dist >= MIN_BEARING_DISTANCE_M) {
+        const b = bearingBetween(prev.lat, prev.lon, v.lat, v.lon);
+        if (Number.isFinite(b)) lastHeading = b;
+      }
+    }
+
     vehicleStates.set(v.id, {
-      prev: existing?.next ?? v,
+      prev,
       next: v,
       fetchedAt: now,
+      lastHeading,
     });
   }
 
@@ -83,7 +154,7 @@ export function getInterpolatedPositions(): InterpolatedVehicle[] {
   const results: InterpolatedVehicle[] = [];
 
   for (const state of vehicleStates.values()) {
-    const { prev, next, fetchedAt } = state;
+    const { prev, next, fetchedAt, lastHeading } = state;
     const elapsed = now - fetchedAt;
     const t = Math.min(elapsed / POLL_INTERVAL_MS, 1);
 
@@ -115,7 +186,12 @@ export function getInterpolatedPositions(): InterpolatedVehicle[] {
       displayLon = prev.lon + (next.lon - prev.lon) * t;
     }
 
-    results.push({ ...next, displayLat, displayLon });
+    results.push({
+      ...next,
+      displayLat,
+      displayLon,
+      displayHeading: lastHeading,
+    });
   }
 
   return results;

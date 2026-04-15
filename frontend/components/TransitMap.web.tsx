@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 // @ts-expect-error react-map-gl subpath export
-import Map, { Marker, Source, Layer } from "react-map-gl/maplibre";
+import Map, { Marker, Popup, Source, Layer } from "react-map-gl/maplibre";
 import maplibregl from "maplibre-gl";
 import { useTransitStore } from "../store/transitStore";
 import type { InterpolatedVehicle } from "../utils/interpolateMovement";
@@ -29,10 +29,14 @@ const TRAIN_COLORS: Record<string, string> = {
   Y: "#f9a825",
 };
 
-function markerColor(v: InterpolatedVehicle): string {
+function vehicleColor(v: InterpolatedVehicle): string {
   if (v.type === "train") return TRAIN_COLORS[v.route] ?? "#333";
   return "#1b5e20";
 }
+
+const HIT_BOX = 44; // Apple HIG min touch target
+const ICON_SIZE = 28;
+const POPUP_GRACE_MS = 150;
 
 // ---------------------------------------------------------------------------
 // MapLibre CSS injection (avoids Metro CSS-loader dependency)
@@ -48,6 +52,54 @@ function useMaplibreCss() {
     link.href = "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css";
     document.head.appendChild(link);
   }, []);
+}
+
+// ---------------------------------------------------------------------------
+// Directional SVG marker
+// ---------------------------------------------------------------------------
+
+interface MarkerIconProps {
+  vehicle: InterpolatedVehicle;
+}
+
+function VehicleIcon({ vehicle: v }: MarkerIconProps) {
+  const fill = vehicleColor(v);
+  // Chevron/teardrop: pointed tip up (north), wide base. Rotation handled
+  // by parent transform so heading=0 means tip pointing north.
+  return (
+    <svg
+      width={ICON_SIZE}
+      height={ICON_SIZE}
+      viewBox="0 0 32 32"
+      style={{
+        display: "block",
+        filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.5))",
+      }}
+    >
+      <path
+        d="M16 2 L28 28 L16 22 L4 28 Z"
+        fill={fill}
+        stroke="#ffffff"
+        strokeWidth={2}
+        strokeLinejoin="round"
+      />
+      {v.type === "bus" ? (
+        <text
+          x={16}
+          y={20}
+          textAnchor="middle"
+          fontSize={9}
+          fontWeight={700}
+          fill="#ffffff"
+          fontFamily="system-ui, sans-serif"
+        >
+          {v.route}
+        </text>
+      ) : (
+        <circle cx={16} cy={17} r={2.4} fill="#ffffff" />
+      )}
+    </svg>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -67,12 +119,38 @@ export default function TransitMap() {
   const showBusRoutes = useTransitStore((s) => s.showBusRoutes);
   const showTrainRoutes = useTransitStore((s) => s.showTrainRoutes);
 
+  // Hover state for the popup
+  const [hovered, setHovered] = useState<InterpolatedVehicle | null>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function openPopup(v: InterpolatedVehicle) {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    setHovered(v);
+  }
+
+  function schedulePopupClose() {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = setTimeout(() => {
+      setHovered(null);
+      closeTimerRef.current = null;
+    }, POPUP_GRACE_MS);
+  }
+
   // ---- lifecycle ---------------------------------------------------------
 
   useEffect(() => {
     const cleanup = startPolling();
     return cleanup;
   }, [startPolling]);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    };
+  }, []);
 
   // ---- filtered vehicles -------------------------------------------------
 
@@ -87,17 +165,15 @@ export default function TransitMap() {
   // ---- filtered route shapes ---------------------------------------------
 
   const filteredShapes = useMemo(() => {
-    if (!routeShapes) return null;
-    const selected = selectedRoutes ? new Set(selectedRoutes) : null;
+    if (!routeShapes || selectedRoutes.length === 0) return null;
+    const selected = new Set(selectedRoutes);
 
     const features = routeShapes.features.filter((f) => {
       const routeType = (f.properties as any).route_type as string;
+      const rid = (f.properties as any).route_id as string;
+      if (!selected.has(rid)) return false;
       if (routeType === "rail" && !showTrainRoutes) return false;
       if (routeType !== "rail" && !showBusRoutes) return false;
-      if (selected) {
-        const rid = (f.properties as any).route_id as string;
-        if (!selected.has(rid)) return false;
-      }
       return true;
     });
 
@@ -143,18 +219,67 @@ export default function TransitMap() {
             latitude={v.displayLat}
             anchor="center"
           >
+            {/*
+              44×44 transparent hit box for easy hover; visible icon centred
+              inside and rotated according to displayHeading.
+            */}
             <div
-              title={`${v.type === "bus" ? "Bus" : "Train"} ${v.route} → ${v.destination}`}
-              style={{
-                ...styles.vehicleDot,
-                background: markerColor(v),
-              }}
-            />
+              onMouseEnter={() => openPopup(v)}
+              onMouseLeave={schedulePopupClose}
+              style={styles.hitBox}
+            >
+              <div
+                style={{
+                  ...styles.iconWrap,
+                  transform: `rotate(${v.displayHeading || 0}deg)`,
+                }}
+              >
+                <VehicleIcon vehicle={v} />
+              </div>
+            </div>
           </Marker>
         ))}
+
+        {hovered && (
+          <Popup
+            longitude={hovered.displayLon}
+            latitude={hovered.displayLat}
+            anchor="bottom"
+            offset={24}
+            closeButton={false}
+            closeOnClick={false}
+            onClose={() => setHovered(null)}
+          >
+            <div
+              onMouseEnter={() => openPopup(hovered)}
+              onMouseLeave={schedulePopupClose}
+              style={styles.popupBody}
+            >
+              <div style={styles.popupTitle}>
+                {hovered.type === "bus" ? "Bus" : "Train"} {hovered.route}
+              </div>
+              <div style={styles.popupRow}>→ {hovered.destination}</div>
+              <div style={styles.popupRow}>ID: {hovered.id}</div>
+              <div style={styles.popupRow}>
+                {Math.round(hovered.speed)} mph · updated{" "}
+                {secondsAgo(hovered.timestamp)}s ago
+              </div>
+            </div>
+          </Popup>
+        )}
       </Map>
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function secondsAgo(ts: string): number {
+  const t = Date.parse(ts);
+  if (!Number.isFinite(t)) return 0;
+  return Math.max(0, Math.round((Date.now() - t) / 1000));
 }
 
 // ---------------------------------------------------------------------------
@@ -182,12 +307,34 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontFamily: "system-ui, sans-serif",
   },
-  vehicleDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    border: "2px solid #fff",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.4)",
+  hitBox: {
+    width: HIT_BOX,
+    height: HIT_BOX,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
     cursor: "pointer",
+    // Transparent — only the inner SVG is visible.
+    background: "transparent",
+  },
+  iconWrap: {
+    width: ICON_SIZE,
+    height: ICON_SIZE,
+    transformOrigin: "50% 50%",
+    transition: "transform 200ms linear",
+  },
+  popupBody: {
+    fontFamily: "system-ui, sans-serif",
+    fontSize: 12,
+    color: "#212121",
+    minWidth: 160,
+  },
+  popupTitle: {
+    fontWeight: 700,
+    fontSize: 13,
+    marginBottom: 4,
+  },
+  popupRow: {
+    lineHeight: "16px",
   },
 };

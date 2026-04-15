@@ -15,16 +15,16 @@ export default function RouteLayer() {
   const routeCollections = useMemo(() => {
     if (!routeShapes) return [];
 
-    // If selectedRoutes is null → show all; if empty array → show none
-    const showAll = selectedRoutes === null;
-    const selected = selectedRoutes ? new Set(selectedRoutes) : null;
+    // selectedRoutes is always a string[] — empty means show none
+    if (selectedRoutes.length === 0) return [];
+    const selected = new Set(selectedRoutes);
 
     const grouped = new Map<string, { color: string; features: GeoJSONFeature[] }>();
 
     for (const feature of routeShapes.features) {
       const routeId = feature.properties.route_id as string;
       if (!routeId) continue;
-      if (!showAll && !(selected?.has(routeId))) continue;
+      if (!selected.has(routeId)) continue;
 
       if (!grouped.has(routeId)) {
         grouped.set(routeId, {
