@@ -46,10 +46,28 @@ function normalizeTrainRun(run) {
     lon: parseFloat(run.lon),
     heading: parseInt(run.heading, 10),
     speed: 0, // Train API does not provide speed; frontend will derive it
-    route: run.rt,
+    route: canonicalTrainRoute(run.rt),
     destination: run.destNm,
     timestamp: run.prdt,
   };
+}
+
+// CTA Train Tracker accepts/returns route codes in mixed case (e.g. "red",
+// "Brn"). Normalise to the GTFS route_id form so the frontend's TRAIN_COLORS
+// lookup and FilterMenu selection (both sourced from GTFS) line up.
+const TRAIN_ROUTE_CANONICAL = {
+  red: "Red",
+  blue: "Blue",
+  brn: "Brn",
+  g: "G",
+  org: "Org",
+  p: "P",
+  pink: "Pink",
+  y: "Y",
+};
+function canonicalTrainRoute(rt) {
+  if (!rt) return rt;
+  return TRAIN_ROUTE_CANONICAL[String(rt).toLowerCase()] ?? rt;
 }
 
 // ---------------------------------------------------------------------------
