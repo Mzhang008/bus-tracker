@@ -38,7 +38,7 @@ function normalizeBusVehicle(v) {
   };
 }
 
-function normalizeTrainRun(run) {
+function normalizeTrainRun(run, routeName) {
   return {
     id: run.rn,
     type: "train",
@@ -46,7 +46,10 @@ function normalizeTrainRun(run) {
     lon: parseFloat(run.lon),
     heading: parseInt(run.heading, 10),
     speed: 0, // Train API does not provide speed; frontend will derive it
-    route: canonicalTrainRoute(run.rt),
+    // CTA Train Tracker puts the route code on the parent <route> element's
+    // @name attribute — the individual <train> runs have no rt field of
+    // their own. We receive it from the caller here.
+    route: canonicalTrainRoute(routeName),
     destination: run.destNm,
     timestamp: run.prdt,
   };
@@ -129,8 +132,11 @@ router.get("/trains/positions", async (req, res, next) => {
 
           const trains = Array.isArray(routeObj) ? routeObj : [routeObj];
           for (const r of trains) {
+            // The parent route code lives on @name (preserved literally in
+            // CTA's JSON output); fall back to plain `name` just in case.
+            const parentRoute = r["@name"] ?? r.name ?? rt;
             const runs = r.train ? (Array.isArray(r.train) ? r.train : [r.train]) : [];
-            allRuns.push(...runs.map(normalizeTrainRun));
+            allRuns.push(...runs.map((run) => normalizeTrainRun(run, parentRoute)));
           }
         })
       );

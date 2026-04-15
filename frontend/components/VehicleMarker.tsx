@@ -5,63 +5,78 @@ import Svg, { Path, Circle, Text as SvgText } from "react-native-svg";
 import type { InterpolatedVehicle } from "../utils/interpolateMovement";
 
 // ---------------------------------------------------------------------------
-// Marker colors
+// Train line registry — single source of truth for color + display name.
+// Mirrors TransitMap.web.tsx.
 // ---------------------------------------------------------------------------
 
-const TRAIN_COLORS: Record<string, string> = {
-  red: "#c62828",
-  blue: "#1565c0",
-  brn: "#6d4c41",
-  brown: "#6d4c41",
-  g: "#2e7d32",
-  grn: "#2e7d32",
-  green: "#2e7d32",
-  org: "#ef6c00",
-  orange: "#ef6c00",
-  p: "#6a1b9a",
-  pur: "#6a1b9a",
-  purple: "#6a1b9a",
-  pink: "#e91e63",
-  pnk: "#e91e63",
-  y: "#f9a825",
-  yellow: "#f9a825",
-};
+interface LineDef {
+  canonical: string;
+  color: string;
+  aliases: string[];
+}
+
+const LINES: LineDef[] = [
+  { canonical: "Red", color: "#c62828", aliases: ["red", "r"] },
+  { canonical: "Blue", color: "#1565c0", aliases: ["blue", "bl"] },
+  { canonical: "Brown", color: "#6d4c41", aliases: ["brn", "brown", "br"] },
+  { canonical: "Green", color: "#2e7d32", aliases: ["g", "grn", "green", "gr"] },
+  { canonical: "Orange", color: "#ef6c00", aliases: ["org", "orange", "o"] },
+  { canonical: "Purple", color: "#6a1b9a", aliases: ["p", "pur", "purp", "purple"] },
+  { canonical: "Pink", color: "#e91e63", aliases: ["pink", "pnk", "pk"] },
+  { canonical: "Yellow", color: "#f9a825", aliases: ["y", "yel", "yellow"] },
+];
+
+const LINE_BY_ALIAS: Record<string, LineDef> = {};
+for (const def of LINES) {
+  for (const a of def.aliases) LINE_BY_ALIAS[a] = def;
+  LINE_BY_ALIAS[def.canonical.toLowerCase()] = def;
+}
+
+function normaliseKey(s: string | undefined | null): string {
+  return (s ?? "").toLowerCase().replace(/[^a-z]/g, "").trim();
+}
+
+interface ResolvedLine {
+  color: string;
+  name: string;
+}
+
+function resolveLine(route: string | undefined | null): ResolvedLine | null {
+  const key = normaliseKey(route);
+  if (!key) return null;
+
+  const exact = LINE_BY_ALIAS[key];
+  if (exact) return { color: exact.color, name: `${exact.canonical} Line` };
+
+  for (const def of LINES) {
+    if (
+      key.startsWith(def.canonical.toLowerCase()) ||
+      def.aliases.some((a) => a.length > 1 && key.startsWith(a))
+    ) {
+      return { color: def.color, name: `${def.canonical} Line` };
+    }
+  }
+  return null;
+}
 
 function vehicleColor(v: InterpolatedVehicle): string {
   if (v.type === "train") {
-    const key = (v.route || "").toLowerCase().trim();
-    return TRAIN_COLORS[key] ?? "#333";
+    return resolveLine(v.route)?.color ?? "#555";
   }
   return "#1b5e20";
 }
 
-const TRAIN_LINE_NAMES: Record<string, string> = {
-  red: "Red Line",
-  blue: "Blue Line",
-  brn: "Brown Line",
-  brown: "Brown Line",
-  g: "Green Line",
-  grn: "Green Line",
-  green: "Green Line",
-  org: "Orange Line",
-  orange: "Orange Line",
-  p: "Purple Line",
-  pur: "Purple Line",
-  purple: "Purple Line",
-  pink: "Pink Line",
-  pnk: "Pink Line",
-  y: "Yellow Line",
-  yellow: "Yellow Line",
-};
-
 function vehicleLabel(v: InterpolatedVehicle): string {
   if (v.type === "train") {
-    const key = (v.route || "").toLowerCase().trim();
-    const line = TRAIN_LINE_NAMES[key] ?? `${v.route} Line`;
-    return `Train · ${line} · ${v.destination}`;
+    const line = resolveLine(v.route);
+    const name = line ? line.name : `${v.route ?? "?"} Line`;
+    return `Train · ${name} · ${v.destination}`;
   }
   return `Bus · ${v.route} · ${v.destination}`;
 }
+
+// TODO: zoom-responsive marker scaling on native — react-native-maps
+// doesn't expose zoom as cleanly as react-map-gl. Deployed target is web.
 
 // ---------------------------------------------------------------------------
 // Layout constants

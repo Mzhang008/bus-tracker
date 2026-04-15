@@ -18,66 +18,104 @@ const CHICAGO = {
 // OpenFreeMap — free, no API key, no attribution fuss
 const MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 
-// Keyed by lowercased variants so case + alias (full name, short code,
-// GTFS code) all resolve to the same brand color.
-const TRAIN_COLORS: Record<string, string> = {
-  red: "#c62828",
-  blue: "#1565c0",
-  brn: "#6d4c41",
-  brown: "#6d4c41",
-  g: "#2e7d32",
-  grn: "#2e7d32",
-  green: "#2e7d32",
-  org: "#ef6c00",
-  orange: "#ef6c00",
-  p: "#6a1b9a",
-  pur: "#6a1b9a",
-  purple: "#6a1b9a",
-  pink: "#e91e63",
-  pnk: "#e91e63",
-  y: "#f9a825",
-  yellow: "#f9a825",
-};
+// ---------------------------------------------------------------------------
+// Train line registry — single source of truth for color + display name.
+// resolveLine() handles every case variant, alias, and short-code we've
+// seen from the CTA Train Tracker feed.
+// ---------------------------------------------------------------------------
 
-const TRAIN_LINE_NAMES: Record<string, string> = {
-  red: "Red Line",
-  blue: "Blue Line",
-  brn: "Brown Line",
-  brown: "Brown Line",
-  g: "Green Line",
-  grn: "Green Line",
-  green: "Green Line",
-  org: "Orange Line",
-  orange: "Orange Line",
-  p: "Purple Line",
-  pur: "Purple Line",
-  purple: "Purple Line",
-  pink: "Pink Line",
-  pnk: "Pink Line",
-  y: "Yellow Line",
-  yellow: "Yellow Line",
-};
+interface LineDef {
+  canonical: string; // "Red", "Brown", ...
+  color: string;
+  aliases: string[];
+}
+
+const LINES: LineDef[] = [
+  { canonical: "Red", color: "#c62828", aliases: ["red", "r"] },
+  { canonical: "Blue", color: "#1565c0", aliases: ["blue", "bl"] },
+  { canonical: "Brown", color: "#6d4c41", aliases: ["brn", "brown", "br"] },
+  { canonical: "Green", color: "#2e7d32", aliases: ["g", "grn", "green", "gr"] },
+  { canonical: "Orange", color: "#ef6c00", aliases: ["org", "orange", "o"] },
+  { canonical: "Purple", color: "#6a1b9a", aliases: ["p", "pur", "purp", "purple"] },
+  { canonical: "Pink", color: "#e91e63", aliases: ["pink", "pnk", "pk"] },
+  { canonical: "Yellow", color: "#f9a825", aliases: ["y", "yel", "yellow"] },
+];
+
+const LINE_BY_ALIAS: Record<string, LineDef> = {};
+for (const def of LINES) {
+  for (const a of def.aliases) LINE_BY_ALIAS[a] = def;
+  LINE_BY_ALIAS[def.canonical.toLowerCase()] = def;
+}
+
+function normaliseKey(s: string | undefined | null): string {
+  return (s ?? "").toLowerCase().replace(/[^a-z]/g, "").trim();
+}
+
+interface ResolvedLine {
+  color: string;
+  name: string; // e.g. "Purple Line"
+  key: string; // normalised input
+}
+
+const LOGGED_UNKNOWN = new Set<string>();
+
+function resolveLine(route: string | undefined | null): ResolvedLine | null {
+  const key = normaliseKey(route);
+  if (!key) return null;
+
+  // 1. Exact alias or canonical match
+  const exact = LINE_BY_ALIAS[key];
+  if (exact) return { color: exact.color, name: `${exact.canonical} Line`, key };
+
+  // 2. startsWith match (handles "purpleexp", "grn2", etc.)
+  for (const def of LINES) {
+    if (
+      key.startsWith(def.canonical.toLowerCase()) ||
+      def.aliases.some((a) => a.length > 1 && key.startsWith(a))
+    ) {
+      return { color: def.color, name: `${def.canonical} Line`, key };
+    }
+  }
+
+  // 3. Single-letter fallback (disambiguate b → Blue vs Brown by checking
+  //    the next char if present)
+  if (key.length === 1) {
+    const letterMap: Record<string, string> = {
+      r: "Red",
+      b: "Blue",
+      g: "Green",
+      o: "Orange",
+      p: "Purple",
+      y: "Yellow",
+    };
+    const canon = letterMap[key];
+    if (canon) {
+      const def = LINES.find((l) => l.canonical === canon)!;
+      return { color: def.color, name: `${def.canonical} Line`, key };
+    }
+  }
+
+  // 4. Unknown — log once and fall through to the caller's default.
+  if (!LOGGED_UNKNOWN.has(key)) {
+    LOGGED_UNKNOWN.add(key);
+    console.warn("[TransitMap] unknown train route code:", route);
+  }
+  return null;
+}
 
 function vehicleLabel(v: InterpolatedVehicle): string {
   if (v.type === "train") {
-    const key = (v.route || "").toLowerCase().trim();
-    const line = TRAIN_LINE_NAMES[key] ?? `${v.route} Line`;
-    return `Train · ${line} · ${v.destination}`;
+    const line = resolveLine(v.route);
+    const name = line ? line.name : `${v.route ?? "?"} Line`;
+    return `Train · ${name} · ${v.destination}`;
   }
   return `Bus · ${v.route} · ${v.destination}`;
 }
 
-const LOGGED_UNKNOWN = new Set<string>();
 function vehicleColor(v: InterpolatedVehicle): string {
   if (v.type === "train") {
-    const key = (v.route || "").toLowerCase().trim();
-    const color = TRAIN_COLORS[key];
-    if (color) return color;
-    if (!LOGGED_UNKNOWN.has(key)) {
-      LOGGED_UNKNOWN.add(key);
-      console.warn("[TransitMap] unknown train route code:", v.route);
-    }
-    return "#333";
+    const line = resolveLine(v.route);
+    return line?.color ?? "#555";
   }
   return "#1b5e20";
 }
@@ -171,6 +209,14 @@ export default function TransitMap() {
   const [hovered, setHovered] = useState<InterpolatedVehicle | null>(null);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Current map zoom — drives the marker scale factor.
+  const [zoom, setZoom] = useState<number>(CHICAGO.zoom);
+  const markerScale = useMemo(() => {
+    // Linear ramp: zoom 10 → 0.6, zoom 13 → 1.0, zoom 16 → 1.8
+    const s = 0.6 + (zoom - 10) * 0.2;
+    return Math.max(0.6, Math.min(1.8, s));
+  }, [zoom]);
+
   function openPopup(v: InterpolatedVehicle) {
     if (closeTimerRef.current) {
       clearTimeout(closeTimerRef.current);
@@ -241,6 +287,7 @@ export default function TransitMap() {
         initialViewState={CHICAGO}
         style={{ width: "100%", height: "100%" }}
         mapStyle={MAP_STYLE}
+        onMove={(e: any) => setZoom(e.viewState.zoom)}
       >
         {filteredShapes && (
           <Source id="routes" type="geojson" data={filteredShapes as any}>
@@ -268,13 +315,17 @@ export default function TransitMap() {
             anchor="center"
           >
             {/*
-              44×44 transparent hit box for easy hover; visible icon centred
-              inside and rotated according to displayHeading.
+              Outer wrapper is scaled by current map zoom (hit box + icon
+              stay proportional). Inner wrapper handles heading rotation.
             */}
             <div
               onMouseEnter={() => openPopup(v)}
               onMouseLeave={schedulePopupClose}
-              style={styles.hitBox}
+              style={{
+                ...styles.hitBox,
+                transform: `scale(${markerScale})`,
+                transition: "transform 150ms linear",
+              }}
             >
               <div
                 style={{
@@ -382,4 +433,4 @@ const styles: Record<string, React.CSSProperties> = {
   popupRow: {
     lineHeight: "16px",
   },
-};
+}
