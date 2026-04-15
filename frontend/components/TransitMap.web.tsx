@@ -18,19 +18,39 @@ const CHICAGO = {
 // OpenFreeMap — free, no API key, no attribution fuss
 const MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 
+// Keyed by lowercased variants so case + alias (full name, short code,
+// GTFS code) all resolve to the same brand color.
 const TRAIN_COLORS: Record<string, string> = {
-  Red: "#c62828",
-  Blue: "#1565c0",
-  Brn: "#6d4c41",
-  G: "#2e7d32",
-  Org: "#ef6c00",
-  P: "#6a1b9a",
-  Pink: "#e91e63",
-  Y: "#f9a825",
+  red: "#c62828",
+  blue: "#1565c0",
+  brn: "#6d4c41",
+  brown: "#6d4c41",
+  g: "#2e7d32",
+  grn: "#2e7d32",
+  green: "#2e7d32",
+  org: "#ef6c00",
+  orange: "#ef6c00",
+  p: "#6a1b9a",
+  pur: "#6a1b9a",
+  purple: "#6a1b9a",
+  pink: "#e91e63",
+  pnk: "#e91e63",
+  y: "#f9a825",
+  yellow: "#f9a825",
 };
 
+const LOGGED_UNKNOWN = new Set<string>();
 function vehicleColor(v: InterpolatedVehicle): string {
-  if (v.type === "train") return TRAIN_COLORS[v.route] ?? "#333";
+  if (v.type === "train") {
+    const key = (v.route || "").toLowerCase().trim();
+    const color = TRAIN_COLORS[key];
+    if (color) return color;
+    if (!LOGGED_UNKNOWN.has(key)) {
+      LOGGED_UNKNOWN.add(key);
+      console.warn("[TransitMap] unknown train route code:", v.route);
+    }
+    return "#333";
+  }
   return "#1b5e20";
 }
 
