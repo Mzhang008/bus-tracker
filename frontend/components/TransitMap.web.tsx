@@ -39,6 +39,34 @@ const TRAIN_COLORS: Record<string, string> = {
   yellow: "#f9a825",
 };
 
+const TRAIN_LINE_NAMES: Record<string, string> = {
+  red: "Red Line",
+  blue: "Blue Line",
+  brn: "Brown Line",
+  brown: "Brown Line",
+  g: "Green Line",
+  grn: "Green Line",
+  green: "Green Line",
+  org: "Orange Line",
+  orange: "Orange Line",
+  p: "Purple Line",
+  pur: "Purple Line",
+  purple: "Purple Line",
+  pink: "Pink Line",
+  pnk: "Pink Line",
+  y: "Yellow Line",
+  yellow: "Yellow Line",
+};
+
+function vehicleLabel(v: InterpolatedVehicle): string {
+  if (v.type === "train") {
+    const key = (v.route || "").toLowerCase().trim();
+    const line = TRAIN_LINE_NAMES[key] ?? `${v.route} Line`;
+    return `Train · ${line} · ${v.destination}`;
+  }
+  return `Bus · ${v.route} · ${v.destination}`;
+}
+
 const LOGGED_UNKNOWN = new Set<string>();
 function vehicleColor(v: InterpolatedVehicle): string {
   if (v.type === "train") {
@@ -275,10 +303,7 @@ export default function TransitMap() {
               onMouseLeave={schedulePopupClose}
               style={styles.popupBody}
             >
-              <div style={styles.popupTitle}>
-                {hovered.type === "bus" ? "Bus" : "Train"} {hovered.route}
-              </div>
-              <div style={styles.popupRow}>→ {hovered.destination}</div>
+              <div style={styles.popupTitle}>{vehicleLabel(hovered)}</div>
               <div style={styles.popupRow}>ID: {hovered.id}</div>
               <div style={styles.popupRow}>
                 {Math.round(hovered.speed)} mph · updated{" "}

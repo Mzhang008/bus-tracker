@@ -35,6 +35,34 @@ function vehicleColor(v: InterpolatedVehicle): string {
   return "#1b5e20";
 }
 
+const TRAIN_LINE_NAMES: Record<string, string> = {
+  red: "Red Line",
+  blue: "Blue Line",
+  brn: "Brown Line",
+  brown: "Brown Line",
+  g: "Green Line",
+  grn: "Green Line",
+  green: "Green Line",
+  org: "Orange Line",
+  orange: "Orange Line",
+  p: "Purple Line",
+  pur: "Purple Line",
+  purple: "Purple Line",
+  pink: "Pink Line",
+  pnk: "Pink Line",
+  y: "Yellow Line",
+  yellow: "Yellow Line",
+};
+
+function vehicleLabel(v: InterpolatedVehicle): string {
+  if (v.type === "train") {
+    const key = (v.route || "").toLowerCase().trim();
+    const line = TRAIN_LINE_NAMES[key] ?? `${v.route} Line`;
+    return `Train · ${line} · ${v.destination}`;
+  }
+  return `Bus · ${v.route} · ${v.destination}`;
+}
+
 // ---------------------------------------------------------------------------
 // Layout constants
 // ---------------------------------------------------------------------------
@@ -95,10 +123,7 @@ const VehicleMarker = React.memo(function VehicleMarker({ vehicle: v }: Props) {
 
       <Callout tooltip>
         <View style={styles.callout}>
-          <Text style={styles.calloutTitle}>
-            {v.type === "bus" ? "Bus" : "Train"} {v.route}
-          </Text>
-          <Text style={styles.calloutRow}>→ {v.destination}</Text>
+          <Text style={styles.calloutTitle}>{vehicleLabel(v)}</Text>
           <Text style={styles.calloutRow}>ID: {v.id}</Text>
           <Text style={styles.calloutRow}>{Math.round(v.speed)} mph</Text>
         </View>
