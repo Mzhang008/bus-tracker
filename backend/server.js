@@ -29,43 +29,36 @@ app.use(
 app.use(express.json());
 
 // ---------------------------------------------------------------------------
-// Pre-load GTFS shapes into memory before accepting requests
+// Routes
 // ---------------------------------------------------------------------------
 
-(async () => {
-  try {
-    await loadAllShapes();
-    console.log("[gtfs] Route shapes loaded into memory");
-  } catch (err) {
-    console.error("[gtfs] Failed to load shapes – endpoint will 503:", err.message);
-  }
+app.use("/api", apiRouter);
+app.use("/api/static", staticDataRouter);
 
-  // ---- Routes -------------------------------------------------------------
-  app.use("/api", apiRouter);
-  app.use("/api/static", staticDataRouter);
-
-  // ---- Serve frontend static build in production --------------------------
-  const publicDir = path.join(__dirname, "public");
-  if (fs.existsSync(publicDir)) {
-    app.use(express.static(publicDir));
-    // SPA fallback: send index.html for any non-API route
-    app.get(/^\/(?!api\/).*/, (_req, res) => {
-      res.sendFile(path.join(publicDir, "index.html"));
-    });
-    console.log("[server] Serving frontend from", publicDir);
-  }
-
-  // ---- Health check -------------------------------------------------------
-  app.get("/health", (_req, res) => res.json({ status: "ok" }));
-
-  // ---- Global error handler -----------------------------------------------
-  app.use((err, _req, res, _next) => {
-    console.error("[error]", err.stack || err.message);
-    res.status(500).json({ error: err.message || "Internal server error" });
+// ---- Serve frontend static build in production ----------------------------
+const publicDir = path.join(__dirname, "public");
+if (fs.existsSync(publicDir)) {
+  app.use(express.static(publicDir));
+  app.get(/^\/(?!api\/).*/, (_req, res) => {
+    res.sendFile(path.join(publicDir, "index.html"));
   });
+  console.log("[server] Serving frontend from", publicDir);
+}
 
-  // ---- Start --------------------------------------------------------------
-  app.listen(PORT, () => {
-    console.log(`[server] CTA proxy listening on http://localhost:${PORT}`);
-  });
-})();
+// ---- Health check ---------------------------------------------------------
+app.get("/health", (_req, res) => res.json({ status: "ok" }));
+
+// ---- Global error handler -------------------------------------------------
+app.use((err, _req, res, _next) => {
+  console.error("[error]", err.stack || err.message);
+  res.status(500).json({ error: err.message || "Internal server error" });
+});
+
+// ---- Start immediately, load GTFS shapes in background --------------------
+app.listen(PORT, () => {
+  console.log(`[server] CTA proxy listening on http://localhost:${PORT}`);
+});
+
+loadAllShapes()
+  .then(() => console.log("[gtfs] Route shapes loaded into memory"))
+  .catch((err) => console.error("[gtfs] Failed to load shapes – endpoint will 503:", err.message));
