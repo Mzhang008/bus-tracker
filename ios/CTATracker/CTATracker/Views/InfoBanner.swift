@@ -46,14 +46,14 @@ struct InfoBanner: View {
 
     // MARK: - Clock
 
-    private static let timeFmt: DateFormatter = {
+    nonisolated(unsafe) private static let timeFmt: DateFormatter = {
         let f = DateFormatter()
         f.timeZone = TimeZone(identifier: "America/Chicago")
         f.dateFormat = "h:mm a"
         return f
     }()
 
-    private static let dateFmt: DateFormatter = {
+    nonisolated(unsafe) private static let dateFmt: DateFormatter = {
         let f = DateFormatter()
         f.timeZone = TimeZone(identifier: "America/Chicago")
         f.dateFormat = "EEE, MMM d"
