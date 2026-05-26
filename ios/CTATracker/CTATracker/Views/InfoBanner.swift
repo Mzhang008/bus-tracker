@@ -11,7 +11,7 @@ struct InfoBanner: View {
                 withAnimation(.easeInOut(duration: 0.2)) { collapsed.toggle() }
             } label: {
                 HStack {
-                    Text("Chicago CTA Tracker")
+                    Text("Chi Transit")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Color(hex: "212121"))
                     Spacer(minLength: 8)

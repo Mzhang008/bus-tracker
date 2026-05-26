@@ -11,7 +11,7 @@ struct FilterMenu: View {
                 withAnimation(.easeInOut(duration: 0.2)) { collapsed.toggle() }
             } label: {
                 HStack {
-                    Text("CTA Filters")
+                    Text("Route Filters")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Color(hex: "212121"))
                     Spacer()

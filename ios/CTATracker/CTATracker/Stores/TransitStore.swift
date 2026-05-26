@@ -116,6 +116,12 @@ final class TransitStore {
 
     // MARK: - Network
 
+    func retryLoading() {
+        stopPolling()
+        error = nil
+        startPolling()
+    }
+
     private func fetchRouteData() async {
         do {
             async let s = TransitAPI.fetchRouteShapes()
@@ -123,9 +129,10 @@ final class TransitStore {
             let (shapes, routes) = try await (s, r)
             routeShapes = shapes
             availableRoutes = routes
+            error = nil
             if !selectedRoutes.isEmpty { await fetchVehicles() }
         } catch {
-            print("[TransitStore] route data load failed: \(error.localizedDescription)")
+            self.error = error.localizedDescription
         }
     }
 
